@@ -1,0 +1,6 @@
+name = "watermark-remover-worker"
+main = "index.js"
+compatibility_date = "2024-01-01"
+
+[env.production]
+name = "watermark-remover-worker"

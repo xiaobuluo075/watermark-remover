@@ -1,0 +1,250 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>水印去除工具</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; background: #f5f5f5; padding: 20px; }
+    .container { max-width: 900px; margin: 0 auto; background: white; border-radius: 12px; padding: 30px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); }
+    h1 { font-size: 28px; margin-bottom: 10px; color: #333; }
+    .subtitle { color: #666; margin-bottom: 30px; font-size: 14px; }
+    .upload-area { border: 2px dashed #ddd; border-radius: 8px; padding: 40px; text-align: center; cursor: pointer; transition: all 0.3s; }
+    .upload-area:hover { border-color: #4CAF50; background: #f9f9f9; }
+    .upload-area.active { border-color: #4CAF50; background: #e8f5e9; }
+    #fileInput { display: none; }
+    .canvas-container { margin: 20px 0; text-align: center; display: none; }
+    #canvas { border: 1px solid #ddd; max-width: 100%; cursor: crosshair; }
+    .controls { display: none; gap: 10px; margin: 20px 0; flex-wrap: wrap; }
+    button { padding: 10px 20px; border: none; border-radius: 6px; cursor: pointer; font-size: 14px; transition: all 0.3s; }
+    .btn-primary { background: #4CAF50; color: white; }
+    .btn-primary:hover { background: #45a049; }
+    .btn-secondary { background: #f0f0f0; color: #333; }
+    .btn-secondary:hover { background: #e0e0e0; }
+    .btn-danger { background: #f44336; color: white; }
+    .btn-danger:hover { background: #da190b; }
+    button:disabled { opacity: 0.5; cursor: not-allowed; }
+    .loading { display: none; text-align: center; margin: 20px 0; color: #666; }
+    .error { display: none; background: #ffebee; color: #c62828; padding: 15px; border-radius: 6px; margin: 20px 0; }
+    .info { background: #e3f2fd; color: #1565c0; padding: 15px; border-radius: 6px; margin: 20px 0; font-size: 14px; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>🎨 AI 水印去除工具</h1>
+    <p class="subtitle">上传图片，框选水印区域，一键去除</p>
+    
+    <div class="upload-area" id="uploadArea">
+      <p style="font-size: 18px; margin-bottom: 10px;">📁 点击或拖拽上传图片</p>
+      <p style="color: #999; font-size: 13px;">支持 JPG、PNG、WEBP 格式</p>
+      <input type="file" id="fileInput" accept="image/jpeg,image/png,image/webp">
+    </div>
+
+    <div class="canvas-container">
+      <canvas id="canvas"></canvas>
+    </div>
+
+    <div class="controls">
+      <button class="btn-primary" id="processBtn">✨ 去除水印</button>
+      <button class="btn-secondary" id="undoBtn">↶ 撤销</button>
+      <button class="btn-secondary" id="clearBtn">🗑️ 清空</button>
+      <button class="btn-secondary" id="resetBtn">🔄 重新上传</button>
+    </div>
+
+    <div class="loading" id="loading">
+      <p>⏳ 正在处理中，请稍候...</p>
+    </div>
+
+    <div class="error" id="error"></div>
+
+    <div class="info">
+      💡 <strong>使用说明：</strong>上传图片后，用鼠标拖拽框选水印区域（可多次框选），然后点击"去除水印"按钮。
+    </div>
+  </div>
+
+  <script>
+    const uploadArea = document.getElementById('uploadArea');
+    const fileInput = document.getElementById('fileInput');
+    const canvas = document.getElementById('canvas');
+    const ctx = canvas.getContext('2d');
+    const canvasContainer = document.querySelector('.canvas-container');
+    const controls = document.querySelector('.controls');
+    const processBtn = document.getElementById('processBtn');
+    const undoBtn = document.getElementById('undoBtn');
+    const clearBtn = document.getElementById('clearBtn');
+    const resetBtn = document.getElementById('resetBtn');
+    const loading = document.getElementById('loading');
+    const errorDiv = document.getElementById('error');
+
+    const WORKER_URL = 'YOUR_WORKER_URL/cleanup';
+
+    let img = null;
+    let selections = [];
+    let isDrawing = false;
+    let startX, startY;
+
+    uploadArea.addEventListener('click', () => fileInput.click());
+
+    fileInput.addEventListener('change', (e) => {
+      const file = e.target.files[0];
+      if (file) loadImage(file);
+    });
+
+    uploadArea.addEventListener('dragover', (e) => {
+      e.preventDefault();
+      uploadArea.classList.add('active');
+    });
+
+    uploadArea.addEventListener('dragleave', () => {
+      uploadArea.classList.remove('active');
+    });
+
+    uploadArea.addEventListener('drop', (e) => {
+      e.preventDefault();
+      uploadArea.classList.remove('active');
+      const file = e.dataTransfer.files[0];
+      if (file && file.type.startsWith('image/')) loadImage(file);
+    });
+
+    function loadImage(file) {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        img = new Image();
+        img.onload = () => {
+          canvas.width = img.width;
+          canvas.height = img.height;
+          ctx.drawImage(img, 0, 0);
+          canvasContainer.style.display = 'block';
+          controls.style.display = 'flex';
+          uploadArea.style.display = 'none';
+          selections = [];
+        };
+        img.src = e.target.result;
+      };
+      reader.readAsDataURL(file);
+    }
+
+    canvas.addEventListener('mousedown', (e) => {
+      const rect = canvas.getBoundingClientRect();
+      startX = (e.clientX - rect.left) * (canvas.width / rect.width);
+      startY = (e.clientY - rect.top) * (canvas.height / rect.height);
+      isDrawing = true;
+    });
+
+    canvas.addEventListener('mousemove', (e) => {
+      if (!isDrawing) return;
+      const rect = canvas.getBoundingClientRect();
+      const x = (e.clientX - rect.left) * (canvas.width / rect.width);
+      const y = (e.clientY - rect.top) * (canvas.height / rect.height);
+      redraw();
+      ctx.strokeStyle = 'red';
+      ctx.lineWidth = 2;
+      ctx.strokeRect(startX, startY, x - startX, y - startY);
+      ctx.fillStyle = 'rgba(255, 0, 0, 0.2)';
+      ctx.fillRect(startX, startY, x - startX, y - startY);
+    });
+
+    canvas.addEventListener('mouseup', (e) => {
+      if (!isDrawing) return;
+      const rect = canvas.getBoundingClientRect();
+      const x = (e.clientX - rect.left) * (canvas.width / rect.width);
+      const y = (e.clientY - rect.top) * (canvas.height / rect.height);
+      selections.push({ x: Math.min(startX, x), y: Math.min(startY, y), w: Math.abs(x - startX), h: Math.abs(y - startY) });
+      isDrawing = false;
+      redraw();
+    });
+
+    function redraw() {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      ctx.drawImage(img, 0, 0);
+      selections.forEach(sel => {
+        ctx.strokeStyle = 'red';
+        ctx.lineWidth = 2;
+        ctx.strokeRect(sel.x, sel.y, sel.w, sel.h);
+        ctx.fillStyle = 'rgba(255, 0, 0, 0.2)';
+        ctx.fillRect(sel.x, sel.y, sel.w, sel.h);
+      });
+    }
+
+    undoBtn.addEventListener('click', () => {
+      selections.pop();
+      redraw();
+    });
+
+    clearBtn.addEventListener('click', () => {
+      selections = [];
+      redraw();
+    });
+
+    resetBtn.addEventListener('click', () => {
+      canvasContainer.style.display = 'none';
+      controls.style.display = 'none';
+      uploadArea.style.display = 'block';
+      fileInput.value = '';
+      errorDiv.style.display = 'none';
+    });
+
+    processBtn.addEventListener('click', async () => {
+      if (selections.length === 0) {
+        showError('请先框选水印区域');
+        return;
+      }
+
+      loading.style.display = 'block';
+      errorDiv.style.display = 'none';
+      processBtn.disabled = true;
+
+      try {
+        const maskCanvas = document.createElement('canvas');
+        maskCanvas.width = canvas.width;
+        maskCanvas.height = canvas.height;
+        const maskCtx = maskCanvas.getContext('2d');
+        maskCtx.fillStyle = 'black';
+        maskCtx.fillRect(0, 0, maskCanvas.width, maskCanvas.height);
+        maskCtx.fillStyle = 'white';
+        selections.forEach(sel => maskCtx.fillRect(sel.x, sel.y, sel.w, sel.h));
+
+        const imageBlob = await new Promise(resolve => canvas.toBlob(resolve, 'image/png'));
+        const maskBlob = await new Promise(resolve => maskCanvas.toBlob(resolve, 'image/png'));
+
+        const formData = new FormData();
+        formData.append('image_file', imageBlob, 'image.png');
+        formData.append('mask_file', maskBlob, 'mask.png');
+
+        const response = await fetch(WORKER_URL, {
+          method: 'POST',
+          body: formData,
+        });
+
+        if (!response.ok) {
+          const err = await response.json();
+          throw new Error(err.error || '处理失败');
+        }
+
+        const resultBlob = await response.blob();
+        const url = URL.createObjectURL(resultBlob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'result.png';
+        a.click();
+        URL.revokeObjectURL(url);
+
+        showError('✅ 处理完成，已自动下载！');
+        errorDiv.style.background = '#e8f5e9';
+        errorDiv.style.color = '#2e7d32';
+      } catch (err) {
+        showError('❌ ' + err.message);
+      } finally {
+        loading.style.display = 'none';
+        processBtn.disabled = false;
+      }
+    });
+
+    function showError(msg) {
+      errorDiv.textContent = msg;
+      errorDiv.style.display = 'block';
+    }
+  </script>
+</body>
+</html>
