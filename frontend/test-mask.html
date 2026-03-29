@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Mask 测试</title>
+  <style>
+    body { padding: 20px; font-family: sans-serif; }
+    canvas { border: 1px solid #ddd; margin: 10px; }
+    .row { display: flex; gap: 20px; margin: 20px 0; }
+  </style>
+</head>
+<body>
+  <h2>Mask 生成测试</h2>
+  <input type="file" id="fileInput" accept="image/*">
+  <div class="row">
+    <div>
+      <h3>原图</h3>
+      <canvas id="original"></canvas>
+    </div>
+    <div>
+      <h3>当前 Mask (黑底白框)</h3>
+      <canvas id="mask1"></canvas>
+    </div>
+    <div>
+      <h3>反转 Mask (白底黑框)</h3>
+      <canvas id="mask2"></canvas>
+    </div>
+  </div>
+  <button onclick="downloadMasks()">下载 Masks</button>
+
+  <script>
+    const fileInput = document.getElementById('fileInput');
+    const originalCanvas = document.getElementById('original');
+    const mask1Canvas = document.getElementById('mask1');
+    const mask2Canvas = document.getElementById('mask2');
+
+    fileInput.addEventListener('change', (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const img = new Image();
+        img.onload = () => {
+          // 原图
+          originalCanvas.width = img.width;
+          originalCanvas.height = img.height;
+          const ctx = originalCanvas.getContext('2d');
+          ctx.drawImage(img, 0, 0);
+
+          // 模拟框选区域 (中间一块)
+          const x = img.width * 0.3;
+          const y = img.height * 0.3;
+          const w = img.width * 0.4;
+          const h = img.height * 0.4;
+
+          // Mask 1: 黑底白框 (当前实现)
+          mask1Canvas.width = img.width;
+          mask1Canvas.height = img.height;
+          const ctx1 = mask1Canvas.getContext('2d');
+          ctx1.fillStyle = 'black';
+          ctx1.fillRect(0, 0, img.width, img.height);
+          ctx1.fillStyle = 'white';
+          ctx1.fillRect(x, y, w, h);
+
+          // Mask 2: 白底黑框 (反转)
+          mask2Canvas.width = img.width;
+          mask2Canvas.height = img.height;
+          const ctx2 = mask2Canvas.getContext('2d');
+          ctx2.fillStyle = 'white';
+          ctx2.fillRect(0, 0, img.width, img.height);
+          ctx2.fillStyle = 'black';
+          ctx2.fillRect(x, y, w, h);
+        };
+        img.src = e.target.result;
+      };
+      reader.readAsDataURL(file);
+    });
+
+    function downloadMasks() {
+      mask1Canvas.toBlob(blob => {
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'mask-black-bg.png';
+        a.click();
+      });
+
+      mask2Canvas.toBlob(blob => {
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'mask-white-bg.png';
+        a.click();
+      });
+    }
+  </script>
+</body>
+</html>

@@ -77,7 +77,7 @@
     const loading = document.getElementById('loading');
     const errorDiv = document.getElementById('error');
 
-    const WORKER_URL = 'YOUR_WORKER_URL/cleanup';
+    const WORKER_URL = '/cleanup';
 
     let img = null;
     let selections = [];
@@ -196,6 +196,14 @@
       processBtn.disabled = true;
 
       try {
+        // 创建纯净的原图 canvas（不含红色框）
+        const cleanCanvas = document.createElement('canvas');
+        cleanCanvas.width = canvas.width;
+        cleanCanvas.height = canvas.height;
+        const cleanCtx = cleanCanvas.getContext('2d');
+        cleanCtx.drawImage(img, 0, 0);
+
+        // 创建 mask
         const maskCanvas = document.createElement('canvas');
         maskCanvas.width = canvas.width;
         maskCanvas.height = canvas.height;
@@ -205,7 +213,7 @@
         maskCtx.fillStyle = 'white';
         selections.forEach(sel => maskCtx.fillRect(sel.x, sel.y, sel.w, sel.h));
 
-        const imageBlob = await new Promise(resolve => canvas.toBlob(resolve, 'image/png'));
+        const imageBlob = await new Promise(resolve => cleanCanvas.toBlob(resolve, 'image/png'));
         const maskBlob = await new Promise(resolve => maskCanvas.toBlob(resolve, 'image/png'));
 
         const formData = new FormData();

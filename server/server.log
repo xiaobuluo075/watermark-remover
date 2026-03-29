@@ -1,0 +1,16 @@
+Server running at http://0.0.0.0:8080
+[Cleanup] Request received, body size: 1403649 Content-Type: multipart/form-data; boundary=----WebKitFormBoundaryt7tc3yB9ka7xs60y
+[Cleanup] ClipDrop response status: 200
+[Cleanup] Success, result size: 2018717
+[Cleanup] Request received, body size: 1402229 Content-Type: multipart/form-data; boundary=----WebKitFormBoundarySGuD46kDtTnPpjPM
+[Cleanup] ClipDrop response status: 200
+[Cleanup] Success, result size: 2040681
+[Cleanup] Request received, body size: 1401612 Content-Type: multipart/form-data; boundary=----WebKitFormBoundaryxMITTEGd2HiMNfgp
+[Cleanup] ClipDrop response status: 200
+[Cleanup] Success, result size: 1142320
+[Cleanup] Request received, body size: 1400155 Content-Type: multipart/form-data; boundary=----WebKitFormBoundaryof07fBtGYTRLNBKQ
+[Cleanup] ClipDrop response status: 200
+[Cleanup] Success, result size: 1129722
+[Cleanup] Request received, body size: 1400623 Content-Type: multipart/form-data; boundary=----WebKitFormBoundary1AnBH6x4zzr68AY6
+[Cleanup] ClipDrop response status: 200
+[Cleanup] Success, result size: 1173693
