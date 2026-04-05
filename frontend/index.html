@@ -8,7 +8,13 @@
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; background: #f5f5f5; padding: 20px; }
     .container { max-width: 900px; margin: 0 auto; background: white; border-radius: 12px; padding: 30px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); }
-    h1 { font-size: 28px; margin-bottom: 10px; color: #333; }
+    .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; position: relative; }
+    h1 { font-size: 28px; color: #333; flex: 1; }
+    .user-info { display: flex; align-items: center; gap: 10px; position: absolute; right: 0; top: 0; }
+    .user-avatar { width: 36px; height: 36px; border-radius: 50%; }
+    .login-btn { padding: 8px 16px; background: #4285f4; color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 14px; }
+    .login-btn:hover { background: #357ae8; }
+    .logout-btn { padding: 6px 12px; background: #f0f0f0; color: #333; border: none; border-radius: 6px; cursor: pointer; font-size: 13px; }
     .subtitle { color: #666; margin-bottom: 30px; font-size: 14px; }
     .upload-area { border: 2px dashed #ddd; border-radius: 8px; padding: 40px; text-align: center; cursor: pointer; transition: all 0.3s; }
     .upload-area:hover { border-color: #4CAF50; background: #f9f9f9; }
@@ -22,8 +28,6 @@
     .btn-primary:hover { background: #45a049; }
     .btn-secondary { background: #f0f0f0; color: #333; }
     .btn-secondary:hover { background: #e0e0e0; }
-    .btn-danger { background: #f44336; color: white; }
-    .btn-danger:hover { background: #da190b; }
     button:disabled { opacity: 0.5; cursor: not-allowed; }
     .loading { display: none; text-align: center; margin: 20px 0; color: #666; }
     .error { display: none; background: #ffebee; color: #c62828; padding: 15px; border-radius: 6px; margin: 20px 0; }
@@ -32,9 +36,12 @@
 </head>
 <body>
   <div class="container">
-    <h1>🎨 AI 水印去除工具</h1>
+    <div class="header">
+      <h1>🎨 AI 水印去除工具</h1>
+      <div class="user-info" id="userInfo"></div>
+    </div>
     <p class="subtitle">上传图片，框选水印区域，一键去除</p>
-    
+
     <div class="upload-area" id="uploadArea">
       <p style="font-size: 18px; margin-bottom: 10px;">📁 点击或拖拽上传图片</p>
       <p style="color: #999; font-size: 13px;">支持 JPG、PNG、WEBP 格式</p>
@@ -52,54 +59,76 @@
       <button class="btn-secondary" id="resetBtn">🔄 重新上传</button>
     </div>
 
-    <div class="loading" id="loading">
-      <p>⏳ 正在处理中，请稍候...</p>
-    </div>
-
+    <div class="loading" id="loading">⏳ 正在处理中，请稍候...</div>
     <div class="error" id="error"></div>
-
-    <div class="info">
-      💡 <strong>使用说明：</strong>上传图片后，用鼠标拖拽框选水印区域（可多次框选），然后点击"去除水印"按钮。
-    </div>
+    <div class="info">💡 <strong>使用说明：</strong>上传图片后，用鼠标拖拽框选水印区域（可多次框选），然后点击"去除水印"按钮。</div>
   </div>
 
   <script>
+    const API_BASE = window.location.hostname === 'watermark-remover-worker.xiaobuluo075.workers.dev'
+      ? window.location.origin
+      : (window.location.hostname.endsWith('watermaskremover.shop')
+          ? 'https://api.watermaskremover.shop'
+          : 'https://watermark-remover-worker.xiaobuluo075.workers.dev');
+
+    let currentUser = null;
+
+    async function loadUser() {
+      try {
+        const res = await fetch(`${API_BASE}/auth/user`, { credentials: 'include' });
+        currentUser = await res.json();
+      } catch {
+        currentUser = null;
+      }
+      updateUserUI();
+    }
+
+    function updateUserUI() {
+      const userInfo = document.getElementById('userInfo');
+      if (currentUser) {
+        userInfo.innerHTML = `
+          <img src="${currentUser.picture}" class="user-avatar" alt="${currentUser.name}">
+          <span>${currentUser.name}</span>
+          <button class="logout-btn" onclick="location.href='${API_BASE}/auth/logout'">退出</button>
+        `;
+      } else {
+        userInfo.innerHTML = `<button class="login-btn" onclick="location.href='${API_BASE}/auth/google'">Google 登录</button>`;
+      }
+    }
+
+    function showMessage(msg, success = false) {
+      const errorDiv = document.getElementById('error');
+      errorDiv.textContent = msg;
+      errorDiv.style.display = 'block';
+      errorDiv.style.background = success ? '#e8f5e9' : '#ffebee';
+      errorDiv.style.color = success ? '#2e7d32' : '#c62828';
+    }
+
+    const authError = new URLSearchParams(window.location.search).get('auth_error');
+    if (authError) {
+      showMessage(decodeURIComponent(authError));
+      const cleaned = new URL(window.location.href);
+      cleaned.searchParams.delete('auth_error');
+      window.history.replaceState({}, '', cleaned.toString());
+    }
+
+    loadUser();
+
     const uploadArea = document.getElementById('uploadArea');
     const fileInput = document.getElementById('fileInput');
     const canvas = document.getElementById('canvas');
     const ctx = canvas.getContext('2d');
     const canvasContainer = document.querySelector('.canvas-container');
     const controls = document.querySelector('.controls');
-    const processBtn = document.getElementById('processBtn');
-    const undoBtn = document.getElementById('undoBtn');
-    const clearBtn = document.getElementById('clearBtn');
-    const resetBtn = document.getElementById('resetBtn');
     const loading = document.getElementById('loading');
     const errorDiv = document.getElementById('error');
 
-    const WORKER_URL = 'https://watermark-remover-worker.xiaobuluo075.workers.dev/cleanup';
-
-    let img = null;
-    let selections = [];
-    let isDrawing = false;
-    let startX, startY;
+    let img = null, selections = [], isDrawing = false, startX, startY;
 
     uploadArea.addEventListener('click', () => fileInput.click());
-
-    fileInput.addEventListener('change', (e) => {
-      const file = e.target.files[0];
-      if (file) loadImage(file);
-    });
-
-    uploadArea.addEventListener('dragover', (e) => {
-      e.preventDefault();
-      uploadArea.classList.add('active');
-    });
-
-    uploadArea.addEventListener('dragleave', () => {
-      uploadArea.classList.remove('active');
-    });
-
+    fileInput.addEventListener('change', (e) => { if (e.target.files[0]) loadImage(e.target.files[0]); });
+    uploadArea.addEventListener('dragover', (e) => { e.preventDefault(); uploadArea.classList.add('active'); });
+    uploadArea.addEventListener('dragleave', () => uploadArea.classList.remove('active'));
     uploadArea.addEventListener('drop', (e) => {
       e.preventDefault();
       uploadArea.classList.remove('active');
@@ -167,17 +196,9 @@
       });
     }
 
-    undoBtn.addEventListener('click', () => {
-      selections.pop();
-      redraw();
-    });
-
-    clearBtn.addEventListener('click', () => {
-      selections = [];
-      redraw();
-    });
-
-    resetBtn.addEventListener('click', () => {
+    document.getElementById('undoBtn').addEventListener('click', () => { selections.pop(); redraw(); });
+    document.getElementById('clearBtn').addEventListener('click', () => { selections = []; redraw(); });
+    document.getElementById('resetBtn').addEventListener('click', () => {
       canvasContainer.style.display = 'none';
       controls.style.display = 'none';
       uploadArea.style.display = 'block';
@@ -185,25 +206,16 @@
       errorDiv.style.display = 'none';
     });
 
-    processBtn.addEventListener('click', async () => {
-      if (selections.length === 0) {
-        showError('请先框选水印区域');
-        return;
-      }
-
+    document.getElementById('processBtn').addEventListener('click', async () => {
+      if (selections.length === 0) { showMessage('请先框选水印区域'); return; }
       loading.style.display = 'block';
       errorDiv.style.display = 'none';
-      processBtn.disabled = true;
-
+      document.getElementById('processBtn').disabled = true;
       try {
-        // 创建纯净的原图 canvas（不含红色框）
         const cleanCanvas = document.createElement('canvas');
         cleanCanvas.width = canvas.width;
         cleanCanvas.height = canvas.height;
-        const cleanCtx = cleanCanvas.getContext('2d');
-        cleanCtx.drawImage(img, 0, 0);
-
-        // 创建 mask
+        cleanCanvas.getContext('2d').drawImage(img, 0, 0);
         const maskCanvas = document.createElement('canvas');
         maskCanvas.width = canvas.width;
         maskCanvas.height = canvas.height;
@@ -212,24 +224,13 @@
         maskCtx.fillRect(0, 0, maskCanvas.width, maskCanvas.height);
         maskCtx.fillStyle = 'white';
         selections.forEach(sel => maskCtx.fillRect(sel.x, sel.y, sel.w, sel.h));
-
         const imageBlob = await new Promise(resolve => cleanCanvas.toBlob(resolve, 'image/png'));
         const maskBlob = await new Promise(resolve => maskCanvas.toBlob(resolve, 'image/png'));
-
         const formData = new FormData();
         formData.append('image_file', imageBlob, 'image.png');
         formData.append('mask_file', maskBlob, 'mask.png');
-
-        const response = await fetch(WORKER_URL, {
-          method: 'POST',
-          body: formData,
-        });
-
-        if (!response.ok) {
-          const err = await response.json();
-          throw new Error(err.error || '处理失败');
-        }
-
+        const response = await fetch(`${API_BASE}/cleanup`, { method: 'POST', body: formData, credentials: 'include' });
+        if (!response.ok) { const err = await response.json(); throw new Error(err.error || '处理失败'); }
         const resultBlob = await response.blob();
         const url = URL.createObjectURL(resultBlob);
         const a = document.createElement('a');
@@ -237,22 +238,14 @@
         a.download = 'result.png';
         a.click();
         URL.revokeObjectURL(url);
-
-        showError('✅ 处理完成，已自动下载！');
-        errorDiv.style.background = '#e8f5e9';
-        errorDiv.style.color = '#2e7d32';
+        showMessage('✅ 处理完成，已自动下载！', true);
       } catch (err) {
-        showError('❌ ' + err.message);
+        showMessage('❌ ' + err.message);
       } finally {
         loading.style.display = 'none';
-        processBtn.disabled = false;
+        document.getElementById('processBtn').disabled = false;
       }
     });
-
-    function showError(msg) {
-      errorDiv.textContent = msg;
-      errorDiv.style.display = 'block';
-    }
   </script>
 </body>
 </html>

@@ -2,5 +2,26 @@ name = "watermark-remover-worker"
 main = "index.js"
 compatibility_date = "2024-01-01"
 
+[[d1_databases]]
+binding = "DB"
+database_name = "watermark-remover"
+database_id = "REPLACE_WITH_YOUR_D1_DATABASE_ID"
+
+[vars]
+APP_BASE_URL = "https://watermaskremover.shop"
+GOOGLE_REDIRECT_URI = "https://api.watermaskremover.shop/auth/google/callback"
+
 [env.production]
 name = "watermark-remover-worker"
+routes = [
+  { pattern = "api.watermaskremover.shop/*", custom_domain = true }
+]
+
+[[env.production.d1_databases]]
+binding = "DB"
+database_name = "watermark-remover"
+database_id = "REPLACE_WITH_YOUR_D1_DATABASE_ID"
+
+[env.production.vars]
+APP_BASE_URL = "https://watermaskremover.shop"
+GOOGLE_REDIRECT_URI = "https://api.watermaskremover.shop/auth/google/callback"
